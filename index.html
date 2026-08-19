@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>鋼軌超音波掃查 3D 模擬器Beta</title>
+<title>鋼軌超音波掃查 3D 模擬器</title>
 <style>
 :root{
   --panel:#2C333B; --panel-edge:#3C454F; --ink:#E8ECEF; --ink-dim:#9AA6B0;
@@ -276,11 +276,11 @@ const DEFECTS = [
    tip:"軌頂 0°(底波衰減)", on:true},
   // 4 軌頭垂直縱裂 VSH:軌頭中心縱向垂直面
   {name:"4 軌頭垂直縱裂 VSH", short:"軌頭垂直縱裂",
-   c:mkV(0, RAIL_H-26, 265), u:mkV(0,16,0), v:mkV(0,0,38),
+   c:mkV(0, RAIL_H-28, 172), u:mkV(0,14,0), v:mkV(0,0,30),
    tip:"軌頂 0° + 軌腰側面", on:true},
-  // 5 軌頭水平縱裂 HSH:軌頂下 10~25 mm 水平面
+  // 5 軌頭水平縱裂 HSH:軌頂下 10~25 mm 水平面(移至後段,避免遮擋前段掃查區)
   {name:"5 軌頭水平縱裂 HSH", short:"軌頭水平縱裂",
-   c:mkV(-4, RAIL_H-18, 168), u:mkV(20,0,0), v:mkV(0,0,32),
+   c:mkV(-3, RAIL_H-21, 258), u:mkV(13,0,0), v:mkV(0,0,20),
    tip:"軌頂 0°(淺層強反射)", on:true},
   // 6 軌腹水平縱裂:軌頭與軌腰交界水平面
   {name:"6 軌腹水平縱裂", short:"軌腹水平縱裂",
@@ -300,7 +300,7 @@ const DEFECTS = [
    tip:"軌頂 0° + 斜束對準界面", on:true},
   // 10 Squat 次表面剝離:踏面下 2~6 mm,順滾動方向斜向深入
   {name:"10 Squat 次表面剝離", short:"Squat 次表面剝離",
-   c:mkV(2, RAIL_H-5, 90), u:mkV(13,0,0), v:mkV(0,5,13),
+   c:mkV(3, RAIL_H-6, 78), u:mkV(9,0,0), v:mkV(0,4,10),
    tip:"軌頂 70° 淺層", on:true},
 ];
 DEFECTS.forEach(d=>{
@@ -490,9 +490,13 @@ const weldMat = new THREE.MeshStandardMaterial({
 /* 瑕疵面 */
 DEFECTS.forEach(df=>{
   const g = new THREE.PlaneGeometry(df.uL*2, df.vL*2);
+  // 越靠近軌頂的瑕疵畫得越透明,避免整片糊在走行面上擋住視線與探頭
+  const shallow = dep(df.c.y) < 30;
+  df.baseOpacity = shallow ? 0.42 : 0.8;
   const m = new THREE.MeshBasicMaterial({
     color:0xe4432a, side:THREE.DoubleSide,
-    transparent:true, opacity:0.85, depthTest:false});
+    transparent:true, opacity:df.baseOpacity,
+    depthTest:shallow, depthWrite:false});
   const mesh = new THREE.Mesh(g,m);
   const mtx = new THREE.Matrix4().makeBasis(df.uN, df.vN, df.n);
   mesh.setRotationFromMatrix(mtx);
@@ -656,7 +660,7 @@ function updateDefButtons(){
     b.classList.toggle("on", df.on);
     b.classList.toggle("off", !df.on);
     df.mesh.visible = df.on;
-    df.mesh.material.opacity = df.hitNow ? 1.0 : 0.8;
+    df.mesh.material.opacity = df.hitNow ? 1.0 : df.baseOpacity;
     df.mesh.material.color.setHex(df.hitNow ? 0xff6a4a : 0xe4432a);
   });
 }
