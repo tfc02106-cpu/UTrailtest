@@ -48,8 +48,11 @@ button{
 button:hover{border-color:#6B7883}
 button:active{transform:translateY(1px);box-shadow:none}
 button.on{background:var(--amber);color:#26211A;border-color:var(--amber);font-weight:700}
-button.def{width:100%;text-align:left}
-button.def.found{border-color:var(--phosphor);color:var(--phosphor)}
+button.def{width:100%;text-align:left;font-size:.71rem;padding:4px 7px;line-height:1.35}
+button.def small{display:block;font-size:.62rem;color:var(--ink-dim);font-weight:400}
+button.def.found{border-color:var(--phosphor);color:var(--phosphor);background:#1c3329}
+button.def.found small{color:var(--phosphor-dim)}
+button.def.off{opacity:.42}
 /* A-Scan */
 #ascan{
   position:fixed;right:10px;bottom:10px;z-index:10;width:330px;
@@ -62,6 +65,10 @@ button.def.found{border-color:var(--phosphor);color:var(--phosphor)}
   font-size:.72rem;color:var(--phosphor)}
 #ro span{flex:1;background:#10181C;border:1px solid #1F2B31;border-radius:4px;
   padding:3px 6px;white-space:nowrap;overflow:hidden}
+#roName{margin-top:5px;font-size:.72rem;color:var(--ink-dim);
+  font-family:Consolas,Menlo,monospace;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+#roName.hit{color:var(--phosphor)}
 #hint{
   position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:10;
   max-width:min(620px, calc(100% - 380px));
@@ -145,13 +152,13 @@ button.def.found{border-color:var(--phosphor);color:var(--phosphor)}
   <div id="ro">
     <span id="roS">S --</span><span id="roD">D --</span><span id="roH">H --</span>
   </div>
+  <div id="roName">未偵測到瑕疵回波</div>
 </div>
 
 <div id="hint">
   <b>操作:</b>抓住橙色探頭<b>直接拖著刷</b>——指標滑到軌頭、軌腰、軌足哪裡,
-  探頭就自動吸附到該面並轉向:軌頂<b>前後掃+左右掃</b>、軌腰側面<b>上下掃</b>(左右側都可)、
-  軌足翼緣<b>來回刷</b>。刷過的聲束留下淡藍覆蓋。
-  試著找出 4 個內部瑕疵各要在哪個面、用哪個角度才照得到。
+  探頭就自動吸附到該面並轉向。鋼軌上有 <b>10 種典型瑕疵</b>(含接頭螺栓孔區與兩處焊道),
+  刷到時該項目會亮綠、A-Scan 顯示名稱。每一種各要用哪個面、哪個角度才照得到?
 </div>
 
 <div id="err">Three.js 載入失敗,請確認網路可連線 cdnjs.cloudflare.com 後重新整理。</div>
@@ -400,6 +407,22 @@ ballast.rotation.x = -Math.PI/2;
 ballast.position.set(0, -36, RAIL_L/2);
 scene.add(ballast);
 
+/* 螺栓孔(接頭區,對應 2 號瑕疵)與焊道標示 */
+const holeMat = new THREE.MeshStandardMaterial({color:0x2b3138, roughness:0.9});
+[100, 136].forEach(z=>{
+  const hole = new THREE.Mesh(new THREE.CylinderGeometry(9,9,20,20), holeMat);
+  hole.rotation.z = Math.PI/2;
+  hole.position.set(0, RAIL_H-88, z);
+  scene.add(hole);
+});
+const weldMat = new THREE.MeshStandardMaterial({
+  color:0x8f9aa4, metalness:0.4, roughness:0.7, transparent:true, opacity:0.55});
+[452, 560].forEach(z=>{
+  const band = new THREE.Mesh(new THREE.BoxGeometry(158, RAIL_H+4, 5), weldMat);
+  band.position.set(0, RAIL_H/2, z);
+  scene.add(band);
+});
+
 /* 瑕疵面 */
 DEFECTS.forEach(df=>{
   const g = new THREE.PlaneGeometry(df.uL*2, df.vL*2);
@@ -483,7 +506,6 @@ function rebuild(){
   }
   placeProbe();
   drawScan();
-  updateDefButtons();
 }
 
 /* ================= A-Scan ================= */
@@ -540,14 +562,25 @@ function drawScan(){
     best ? "H "+Math.round(Math.min(1,best.amp*1.6)*100)+"%" : "H --";
   DEFECTS.forEach(df => df.hitNow = false);
   if (best && best.def) best.def.hitNow = true;
+  const rn = document.getElementById("roName");
+  if (best && best.def){
+    rn.textContent = "▶ " + best.def.name;
+    rn.classList.add("hit");
+  } else {
+    rn.textContent = "未偵測到瑕疵回波";
+    rn.classList.remove("hit");
+  }
+  updateDefButtons();
 }
 function updateDefButtons(){
   DEFECTS.forEach((df,i)=>{
     const b = document.getElementById("d"+i);
+    if (!b) return;
     b.classList.toggle("found", !!df.hitNow);
     b.classList.toggle("on", df.on);
+    b.classList.toggle("off", !df.on);
     df.mesh.visible = df.on;
-    df.mesh.material.opacity = df.hitNow ? 1.0 : 0.85;
+    df.mesh.material.opacity = df.hitNow ? 1.0 : 0.8;
     df.mesh.material.color.setHex(df.hitNow ? 0xff6a4a : 0xe4432a);
   });
 }
@@ -690,10 +723,21 @@ for(const id in VIEWS){
     applyCam();
   });
 }
+/* 動態建立瑕疵清單 */
+const defList = document.getElementById("defList");
 DEFECTS.forEach((df,i)=>{
-  document.getElementById("d"+i).addEventListener("click", ()=>{
-    df.on = !df.on; rebuild();
-  });
+  const b = document.createElement("button");
+  b.className = "def on";
+  b.id = "d"+i;
+  b.innerHTML = df.name + "<small>" + df.tip + "</small>";
+  b.addEventListener("click", ()=>{ df.on = !df.on; rebuild(); });
+  defList.appendChild(b);
+});
+document.getElementById("defAll").addEventListener("click", ()=>{
+  DEFECTS.forEach(d=>d.on = true); rebuild();
+});
+document.getElementById("defNone").addEventListener("click", ()=>{
+  DEFECTS.forEach(d=>d.on = false); rebuild();
 });
 document.getElementById("anim").addEventListener("click", e=>{
   animOn = !animOn;
