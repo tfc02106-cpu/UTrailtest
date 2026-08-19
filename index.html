@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>鋼軌超音波掃查 3D 模擬器(Beta)</title>
+<title>鋼軌超音波掃查 3D 模擬器(Beta)Built by 智動精密量測實驗室</title>
 <style>
 :root{
   --panel:#2C333B; --panel-edge:#3C454F; --ink:#E8ECEF; --ink-dim:#9AA6B0;
@@ -480,9 +480,10 @@ BOLTS.forEach(b=>{
   scene.add(hole);
 });
 const weldMat = new THREE.MeshStandardMaterial({
-  color:0x8f9aa4, metalness:0.4, roughness:0.7, transparent:true, opacity:0.55});
+  color:0x9aa5af, metalness:0.35, roughness:0.75,
+  transparent:true, opacity:0.28, depthWrite:false});
 [452, 560].forEach(z=>{
-  const band = new THREE.Mesh(new THREE.BoxGeometry(158, RAIL_H+4, 5), weldMat);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(154, RAIL_H, 3), weldMat);
   band.position.set(0, RAIL_H/2, z);
   scene.add(band);
 });
@@ -490,13 +491,12 @@ const weldMat = new THREE.MeshStandardMaterial({
 /* 瑕疵面 */
 DEFECTS.forEach(df=>{
   const g = new THREE.PlaneGeometry(df.uL*2, df.vL*2);
-  // 越靠近軌頂的瑕疵畫得越透明,避免整片糊在走行面上擋住視線與探頭
-  const shallow = dep(df.c.y) < 30;
-  df.baseOpacity = shallow ? 0.42 : 0.8;
+  // 一律穿透顯示(depthTest:false),否則半透明鋼軌會把淺層瑕疵擋掉;
+  // 改以不透明度區分:越淺越淡,避免整片糊在走行面上。
+  df.baseOpacity = dep(df.c.y) < 30 ? 0.55 : 0.82;
   const m = new THREE.MeshBasicMaterial({
     color:0xe4432a, side:THREE.DoubleSide,
-    transparent:true, opacity:df.baseOpacity,
-    depthTest:shallow, depthWrite:false});
+    transparent:true, opacity:df.baseOpacity, depthTest:false});
   const mesh = new THREE.Mesh(g,m);
   const mtx = new THREE.Matrix4().makeBasis(df.uN, df.vN, df.n);
   mesh.setRotationFromMatrix(mtx);
