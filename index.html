@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鋼軌超音波掃查 3D 模擬器</title>
+<style>
+:root{
+  --panel:#2C333B; --panel-edge:#3C454F; --ink:#E8ECEF; --ink-dim:#9AA6B0;
+  --crt-bg:#0A1410; --phosphor:#3CE896; --phosphor-dim:#1E7A50;
+  --amber:#F2A93B; --key:#3A424B;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:#22282E;color:var(--ink);
+  font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;
+  overflow:hidden;
+}
+#scene{position:fixed;inset:0}
+/* 頂列 */
+#topbar{
+  position:fixed;top:0;left:0;right:0;z-index:10;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:8px 14px;
+  background:rgba(34,40,46,.88);border-bottom:1px solid var(--panel-edge);
+  backdrop-filter:blur(4px);
+}
+#topbar h1{font-size:.95rem;letter-spacing:.06em}
+#topbar .badge{font-size:.62rem;color:var(--amber);border:1px solid var(--amber);
+  border-radius:3px;padding:1px 6px;letter-spacing:.15em}
+/* 控制面板 */
+#panel{
+  position:fixed;left:10px;top:52px;z-index:10;width:212px;
+  background:rgba(36,43,50,.92);border:1px solid var(--panel-edge);
+  border-radius:8px;padding:10px;backdrop-filter:blur(4px);
+  max-height:calc(100% - 66px);overflow:auto;
+}
+.group{margin-bottom:10px}
+.group>span{display:block;font-size:.62rem;color:var(--ink-dim);
+  letter-spacing:.18em;margin-bottom:5px}
+.keys{display:flex;gap:5px;flex-wrap:wrap}
+button{
+  font-family:inherit;font-size:.76rem;color:var(--ink);
+  background:var(--key);border:1px solid #4A545F;border-radius:5px;
+  padding:5px 9px;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.35);
+}
+button:hover{border-color:#6B7883}
+button:active{transform:translateY(1px);box-shadow:none}
+button.on{background:var(--amber);color:#26211A;border-color:var(--amber);font-weight:700}
+button.def{width:100%;text-align:left}
+button.def.found{border-color:var(--phosphor);color:var(--phosphor)}
+/* A-Scan */
+#ascan{
+  position:fixed;right:10px;bottom:10px;z-index:10;width:330px;
+  background:rgba(36,43,50,.92);border:1px solid var(--panel-edge);
+  border-radius:8px;padding:8px;backdrop-filter:blur(4px);
+}
+#ascan h2{font-size:.62rem;color:var(--ink-dim);letter-spacing:.2em;margin-bottom:5px}
+#scanCv{display:block;width:100%;border-radius:4px;background:var(--crt-bg)}
+#ro{display:flex;gap:6px;margin-top:6px;font-family:Consolas,Menlo,monospace;
+  font-size:.72rem;color:var(--phosphor)}
+#ro span{flex:1;background:#10181C;border:1px solid #1F2B31;border-radius:4px;
+  padding:3px 6px;white-space:nowrap;overflow:hidden}
+#hint{
+  position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:10;
+  max-width:min(620px, calc(100% - 380px));
+  background:rgba(36,43,50,.92);border:1px solid var(--panel-edge);
+  border-radius:8px;padding:7px 12px;font-size:.74rem;color:var(--ink-dim);
+  line-height:1.55;backdrop-filter:blur(4px);
+}
+#hint b{color:var(--ink)}
+@media(max-width:900px){
+  #hint{display:none}
+  #ascan{width:270px}
+  #panel{width:186px}
+}
+#err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  color:var(--ink);z-index:50;text-align:center;padding:30px;line-height:1.8}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="topbar">
+  <h1>鋼軌超音波掃查 3D 模擬器</h1>
+  <span class="badge">教學模擬</span>
+  <span style="font-size:.7rem;color:var(--ink-dim)">
+    抓住橙色探頭直接刷,指到軌頭/軌腰/軌足會自動吸附換面・拖空間=旋轉・滾輪=縮放
+  </span>
+</div>
+
+<div id="panel">
+  <div class="group">
+    <span>掃查面(拖曳自動吸附)</span>
+    <div class="keys">
+      <button id="sTop" class="on">軌頂走行面</button>
+      <button id="sWeb">軌腰側面</button>
+      <button id="sFoot">軌足上表面</button>
+    </div>
+  </div>
+  <div class="group">
+    <span>探頭角度</span>
+    <div class="keys">
+      <button id="a0" class="on">0°</button>
+      <button id="a45">45°</button>
+      <button id="a70">70°</button>
+    </div>
+  </div>
+  <div class="group">
+    <span>聲束方向(沿軌向)</span>
+    <div class="keys">
+      <button id="dF" class="on">前 ▲</button>
+      <button id="dB">後 ▼</button>
+    </div>
+  </div>
+  <div class="group">
+    <span>視角</span>
+    <div class="keys">
+      <button id="vSquat">蹲姿</button>
+      <button id="vSide">側視</button>
+      <button id="vTopV">俯視</button>
+    </div>
+  </div>
+  <div class="group">
+    <span>內部瑕疵(點擊開關)</span>
+    <div class="keys" style="margin-bottom:5px">
+      <button id="defAll">全開</button>
+      <button id="defNone">全關</button>
+    </div>
+    <div class="keys" id="defList" style="flex-direction:column"></div>
+  </div>
+  <div class="group">
+    <span>畫面</span>
+    <div class="keys">
+      <button id="anim" class="on">脈衝動畫</button>
+      <button id="clearCov">清除覆蓋</button>
+    </div>
+  </div>
+</div>
+
+<div id="ascan">
+  <h2>A-SCAN(聲程 0–500 mm)</h2>
+  <canvas id="scanCv" width="640" height="330"></canvas>
+  <div id="ro">
+    <span id="roS">S --</span><span id="roD">D --</span><span id="roH">H --</span>
+  </div>
+</div>
+
+<div id="hint">
+  <b>操作:</b>抓住橙色探頭<b>直接拖著刷</b>——指標滑到軌頭、軌腰、軌足哪裡,
+  探頭就自動吸附到該面並轉向:軌頂<b>前後掃+左右掃</b>、軌腰側面<b>上下掃</b>(左右側都可)、
+  軌足翼緣<b>來回刷</b>。刷過的聲束留下淡藍覆蓋。
+  試著找出 4 個內部瑕疵各要在哪個面、用哪個角度才照得到。
+</div>
+
+<div id="err">Three.js 載入失敗,請確認網路可連線 cdnjs.cloudflare.com 後重新整理。</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+if (typeof THREE === "undefined"){
+  document.getElementById("err").style.display = "flex";
+  return;
+}
+
+/* ================= 幾何常數(mm,世界座標 y 向上,鋼軌沿 z) ================= */
+const RAIL_L = 600, RAIL_H = 172;
+const PROF = [           // [深度d(自軌頂), 半寬hw]
+  [0,16],[3,28],[9,35],[15,36],[31,36],[37,31],[44,16],
+  [51,8.75],[125,8.75],[132,12],[140,22],[160.5,75],[172,75]
+];
+function hwAtDepth(d){
+  for(let i=0;i<PROF.length-1;i++){
+    const [d1,h1]=PROF[i], [d2,h2]=PROF[i+1];
+    if (d>=d1 && d<=d2)
+      return d2===d1 ? Math.min(h1,h2) : h1+(h2-h1)*(d-d1)/(d2-d1);
+  }
+  return 0;
+}
+const dep = y => RAIL_H - y;                 // 世界 y → 深度
+const insideRail = (x,y,z) =>
+  z>=0 && z<=RAIL_L && y>=0 && y<=RAIL_H && Math.abs(x) <= hwAtDepth(dep(y));
+
+/* ================= 狀態 ================= */
+let surfKind = "top", surfSide = -1;   // 掃查面種類與左右側(拖曳時自動吸附切換)
+let angleDeg = 0, dirSign = 1;         // 沿軌向 ±z
+let probeU = 300, probeV = 0;          // u=沿軌 z;v=面內另一軸
+let animOn = true, animT = 0, lastTs = 0;
+const V_L = 5920, V_S = 3230, SCAN_MAX = 500;
+const N_RAYS = 13, SPREAD = 4*Math.PI/180;
+
+/* 掃查面幾何:top(軌頂)/ web(軌腰側面,side=±1)/ foot(軌足上斜面,side=±1) */
+const footP1 = {x:22, y:RAIL_H-140}, footP2 = {x:75, y:RAIL_H-160.5};
+const footN = (()=>{                    // 軌足斜面法向的 |x|,|y| 分量(左右對稱)
+  const tx = footP2.x-footP1.x, ty = footP2.y-footP1.y;
+  const L = Math.hypot(tx,ty);
+  return {x:Math.abs(ty/L), y:Math.abs(tx/L)};
+})();
+function footYofX(ax){                  // |x| → 斜面上的 y
+  const f = (ax - footP1.x)/(footP2.x - footP1.x);
+  return footP1.y + (footP2.y - footP1.y)*f;
+}
+function probePos(){
+  if (surfKind==="top")  return mkV(probeV, RAIL_H, probeU);
+  if (surfKind==="web")  return mkV(surfSide*8.75, probeV, probeU);
+  return mkV(probeV, footYofX(Math.abs(probeV)), probeU);  // foot:probeV 為帶號 x
+}
+function inwardVec(){
+  if (surfKind==="top") return mkV(0,-1,0);
+  if (surfKind==="web") return mkV(-surfSide,0,0);
+  return mkV(-surfSide*footN.x, -footN.y, 0).normalize();
+}
+function beamDir(){
+  const inw = inwardVec();
+  const alo = mkV(0,0,dirSign);
+  const th = angleDeg*Math.PI/180;
+  return inw.multiplyScalar(Math.cos(th)).add(alo.multiplyScalar(Math.sin(th))).normalize();
+}
+
+/* 10 種典型鋼軌瑕疵(位置、方向依常見成因設定;tip = 建議掃查方式) */
+const mkV = (x,y,z)=>new THREE.Vector3(x,y,z);
+const DEFECTS = [
+  // 1 軌頭橫向核疲勞破裂:偏軌距角側,面垂直於軌向
+  {name:"1 軌頭橫向核破裂", short:"軌頭橫向核破裂",
+   c:mkV(-12, RAIL_H-20, 350), u:mkV(10,0,0), v:mkV(0,11,0),
+   tip:"軌頂 70° 前/後掃", on:true},
+  // 2 螺栓孔斜裂紋:軌腰孔緣沿 45° 延伸
+  {name:"2 螺栓孔斜裂紋", short:"螺栓孔斜裂紋",
+   c:mkV(0, RAIL_H-88, 118), u:mkV(8,0,0), v:mkV(0,15,15),
+   tip:"軌頂 45°(或 70°)", on:true},
+  // 3 軌腹垂直縱裂 VSW:軌腰中心厚度方向,面為垂直縱向
+  {name:"3 軌腹垂直縱裂", short:"軌腹垂直縱裂",
+   c:mkV(0, RAIL_H-90, 210), u:mkV(0,26,0), v:mkV(0,0,40),
+   tip:"軌頂 0°(底波衰減)", on:true},
+  // 4 軌頭垂直縱裂 VSH:軌頭中心縱向垂直面
+  {name:"4 軌頭垂直縱裂 VSH", short:"軌頭垂直縱裂",
+   c:mkV(0, RAIL_H-26, 265), u:mkV(0,16,0), v:mkV(0,0,38),
+   tip:"軌頂 0° + 軌腰側面", on:true},
+  // 5 軌頭水平縱裂 HSH:軌頂下 10~25 mm 水平面
+  {name:"5 軌頭水平縱裂 HSH", short:"軌頭水平縱裂",
+   c:mkV(-4, RAIL_H-18, 168), u:mkV(20,0,0), v:mkV(0,0,32),
+   tip:"軌頂 0°(淺層強反射)", on:true},
+  // 6 軌腹水平縱裂:軌頭與軌腰交界水平面
+  {name:"6 軌腹水平縱裂", short:"軌腹水平縱裂",
+   c:mkV(0, RAIL_H-95, 405), u:mkV(7,0,0), v:mkV(0,0,26),
+   tip:"軌頂 0°(中層異常波)", on:true},
+  // 7 軌底橫向破裂:軌底翼緣,面垂直於軌向
+  {name:"7 軌底橫向破裂", short:"軌底橫向破裂",
+   c:mkV(-46, 9, 500), u:mkV(20,0,0), v:mkV(0,7,0),
+   tip:"軌足 0° 或軌頂 45°", on:true},
+  // 8 鋁熱銲未熔合:焊道整個斷面的垂直界面
+  {name:"8 鋁熱銲未熔合", short:"鋁熱銲未熔合",
+   c:mkV(0, RAIL_H-92, 452), u:mkV(9,0,0), v:mkV(0,36,0),
+   tip:"軌頂 0°/45°/70° 全掃", on:true},
+  // 9 閃焊面未熔合:平直銲接界面(較大、較薄)
+  {name:"9 閃焊面未熔合", short:"閃焊面未熔合",
+   c:mkV(0, RAIL_H-30, 560), u:mkV(14,0,0), v:mkV(0,18,0),
+   tip:"軌頂 0° + 斜束對準界面", on:true},
+  // 10 Squat 次表面剝離:踏面下 2~6 mm,順滾動方向斜向深入
+  {name:"10 Squat 次表面剝離", short:"Squat 次表面剝離",
+   c:mkV(2, RAIL_H-5, 90), u:mkV(13,0,0), v:mkV(0,5,13),
+   tip:"軌頂 70° 淺層", on:true},
+];
+DEFECTS.forEach(d=>{
+  d.n = d.u.clone().cross(d.v).normalize();
+  d.uL = d.u.length(); d.vL = d.v.length();
+  d.uN = d.u.clone().normalize(); d.vN = d.v.clone().normalize();
+});
+
+/* ================= 射線追蹤(步進法) ================= */
+function traceRay(origin, d0, weight){
+  const p = origin.clone(), dir = d0.clone();
+  const pts = [p.clone()];
+  let s = 0, echo = null, bounced = false;
+  const STEP = 2.5, MAX_S = 500;
+  for(let i=0; i<MAX_S/STEP; i++){
+    const q = p.clone().addScaledVector(dir, STEP);
+    // 瑕疵相交檢查(線段-矩形)
+    let hit = null;
+    for(const df of DEFECTS){
+      if (!df.on) continue;
+      const dn = dir.dot(df.n);
+      if (Math.abs(dn) < 1e-6) continue;
+      const t = df.c.clone().sub(p).dot(df.n) / dn;
+      if (t <= 0 || t > STEP) continue;
+      const hp = p.clone().addScaledVector(dir, t);
+      const rel = hp.clone().sub(df.c);
+      if (Math.abs(rel.dot(df.uN)) <= df.uL && Math.abs(rel.dot(df.vN)) <= df.vL){
+        if (!hit || t < hit.t) hit = {t, hp, df};
+      }
+    }
+    if (hit){
+      s += hit.t;
+      pts.push(hit.hp);
+      const cosI = Math.abs(dir.dot(hit.df.n));
+      const amp = weight * (0.85*Math.pow(cosI,12) + 0.15*Math.pow(cosI,3))
+                  * Math.exp(-s/420);
+      echo = {s, amp, def:hit.df, y:hit.hp.y};
+      break;
+    }
+    // 底面反彈(僅一次;0° 底波)
+    if (q.y < 0 && !bounced && Math.abs(q.x) <= 75){
+      const cosI = Math.abs(dir.y);
+      const wamp = weight * 0.9*Math.pow(cosI,12) * Math.exp(-(s+STEP)/420);
+      if (wamp > 1e-4 && !echo) echo = {s:s+STEP, amp:wamp, wall:true, y:0};
+      dir.y = -dir.y; bounced = true;
+      q.y = Math.abs(q.y);
+    }
+    if (!insideRail(q.x, q.y, q.z)) { pts.push(q); break; }
+    p.copy(q); s += STEP;
+    if (i % 4 === 0) pts.push(p.clone());
+  }
+  return {pts, echo};
+}
+function coneRays(){
+  const c = beamDir(), o = probePos();
+  // 建立與 c 垂直的兩軸
+  const a = Math.abs(c.y) < 0.9 ? mkV(0,1,0) : mkV(1,0,0);
+  const e1 = c.clone().cross(a).normalize();
+  const e2 = c.clone().cross(e1).normalize();
+  const rays = [];
+  rays.push({d:c, w:1, center:true});
+  for(let k=0;k<N_RAYS-1;k++){
+    const ang = (k/(N_RAYS-1))*Math.PI*2;
+    const r = SPREAD * (0.4 + 0.6*((k%3)+1)/3);
+    const d = c.clone()
+      .addScaledVector(e1, Math.cos(ang)*Math.tan(r))
+      .addScaledVector(e2, Math.sin(ang)*Math.tan(r)).normalize();
+    rays.push({d, w:Math.exp(-2.2*(r/SPREAD)*(r/SPREAD)), center:false});
+  }
+  return rays.map(r => Object.assign(traceRay(o, r.d, r.w), {center:r.center, w:r.w}));
+}
+
+/* ================= Three.js 場景 ================= */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x22282E);
+scene.fog = new THREE.Fog(0x22282E, 900, 2200);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.getElementById("scene").appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(50, 1, 1, 4000);
+
+/* 自製軌道攝影機 */
+const camCtl = {theta:-0.9, phi:0.42, dist:520, target:mkV(0,70,300)};
+function applyCam(){
+  const {theta,phi,dist,target} = camCtl;
+  camera.position.set(
+    target.x + dist*Math.cos(phi)*Math.sin(theta),
+    target.y + dist*Math.sin(phi),
+    target.z + dist*Math.cos(phi)*Math.cos(theta));
+  camera.lookAt(target);
+}
+function sizeRenderer(){
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", sizeRenderer);
+
+/* 光照 */
+scene.add(new THREE.HemisphereLight(0xdfe8ee, 0x3a3f45, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+sun.position.set(-300, 500, 200);
+scene.add(sun);
+
+/* 鋼軌(擠出 UIC60 斷面) */
+const shape = new THREE.Shape();
+shape.moveTo(PROF[0][1], RAIL_H-PROF[0][0]);
+for(let i=1;i<PROF.length;i++) shape.lineTo(PROF[i][1], RAIL_H-PROF[i][0]);
+shape.lineTo(-PROF[PROF.length-1][1], 0);
+for(let i=PROF.length-2;i>=0;i--) shape.lineTo(-PROF[i][1], RAIL_H-PROF[i][0]);
+shape.closePath();
+const railGeo = new THREE.ExtrudeGeometry(shape, {depth:RAIL_L, bevelEnabled:false});
+const railMat = new THREE.MeshStandardMaterial({
+  color:0xb9c3cb, metalness:0.55, roughness:0.38,
+  transparent:true, opacity:0.9
+});
+const railMesh = new THREE.Mesh(railGeo, railMat);
+scene.add(railMesh);
+// 軌頂磨亮走行帶
+const shine = new THREE.Mesh(
+  new THREE.BoxGeometry(30, 0.8, RAIL_L),
+  new THREE.MeshStandardMaterial({color:0xf2f5f7, metalness:0.9, roughness:0.15}));
+shine.position.set(0, RAIL_H+0.4, RAIL_L/2);
+scene.add(shine);
+
+/* 軌枕與道碴 */
+const tieMat = new THREE.MeshStandardMaterial({color:0x6d675e, roughness:0.95});
+for(let z=40; z<RAIL_L; z+=150){
+  const tie = new THREE.Mesh(new THREE.BoxGeometry(420, 34, 52), tieMat);
+  tie.position.set(0, -17, z);
+  scene.add(tie);
+}
+const ballast = new THREE.Mesh(
+  new THREE.PlaneGeometry(2400, 2400),
+  new THREE.MeshStandardMaterial({color:0x4a4f55, roughness:1}));
+ballast.rotation.x = -Math.PI/2;
+ballast.position.set(0, -36, RAIL_L/2);
+scene.add(ballast);
+
+/* 瑕疵面 */
+DEFECTS.forEach(df=>{
+  const g = new THREE.PlaneGeometry(df.uL*2, df.vL*2);
+  const m = new THREE.MeshBasicMaterial({
+    color:0xe4432a, side:THREE.DoubleSide,
+    transparent:true, opacity:0.85, depthTest:false});
+  const mesh = new THREE.Mesh(g,m);
+  const mtx = new THREE.Matrix4().makeBasis(df.uN, df.vN, df.n);
+  mesh.setRotationFromMatrix(mtx);
+  mesh.position.copy(df.c);
+  mesh.renderOrder = 5;
+  df.mesh = mesh;
+  scene.add(mesh);
+});
+
+/* 探頭 */
+const probeGrp = new THREE.Group();
+const probeBody = new THREE.Mesh(
+  new THREE.BoxGeometry(26, 16, 34),
+  new THREE.MeshStandardMaterial({color:0xC7861F, metalness:0.3, roughness:0.5}));
+probeBody.position.y = 8;
+probeGrp.add(probeBody);
+const cable = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.6,1.6,26,8),
+  new THREE.MeshStandardMaterial({color:0x333a41}));
+cable.position.y = 22;
+probeGrp.add(cable);
+const pickBall = new THREE.Mesh(                 // 隱形抓取範圍(好抓)
+  new THREE.SphereGeometry(32, 8, 8),
+  new THREE.MeshBasicMaterial({visible:false}));
+pickBall.position.y = 8;
+probeGrp.add(pickBall);
+scene.add(probeGrp);
+function placeProbe(){
+  const p = probePos();
+  probeGrp.position.copy(p);
+  const outw = inwardVec().clone().negate();     // 探頭「上方」= 面外法向
+  const q = new THREE.Quaternion().setFromUnitVectors(mkV(0,1,0), outw);
+  probeGrp.setRotationFromQuaternion(q);
+}
+
+/* 聲束(每幀重建)與覆蓋殘跡 */
+const beamGrp = new THREE.Group(); beamGrp.renderOrder = 6; scene.add(beamGrp);
+const covGrp = new THREE.Group();  covGrp.renderOrder = 4;  scene.add(covGrp);
+const covMat = new THREE.LineBasicMaterial({
+  color:0x2E7CD6, transparent:true, opacity:0.06, depthTest:false});
+const beamMat = new THREE.LineBasicMaterial({
+  color:0x2E7CD6, transparent:true, opacity:0.30, depthTest:false});
+const beamMatC = new THREE.LineBasicMaterial({
+  color:0x53a8ff, transparent:true, opacity:0.9, depthTest:false});
+let lastCov = {u:-999, v:-999, key:""};
+function mkLine(pts, mat){
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(g, mat);
+}
+const pulse = new THREE.Mesh(
+  new THREE.SphereGeometry(4, 12, 12),
+  new THREE.MeshBasicMaterial({color:0x3CE896, transparent:true, opacity:0.95, depthTest:false}));
+pulse.renderOrder = 7; scene.add(pulse);
+
+let rays = [];
+function rebuild(){
+  rays = coneRays();
+  // 即時聲束
+  while(beamGrp.children.length){
+    const c0 = beamGrp.children.pop();
+    c0.geometry.dispose(); beamGrp.remove(c0);
+  }
+  for(const r of rays)
+    beamGrp.add(mkLine(r.pts, r.center ? beamMatC : beamMat));
+  // 覆蓋殘跡(移動超過門檻才留)
+  const key = surfKind+"|"+surfSide+"|"+angleDeg+"|"+dirSign;
+  if (Math.abs(probeU-lastCov.u)>3 || Math.abs(probeV-lastCov.v)>3 || key!==lastCov.key){
+    lastCov = {u:probeU, v:probeV, key};
+    const c = rays.find(r=>r.center);
+    if (c) covGrp.add(mkLine(c.pts, covMat));
+    while(covGrp.children.length > 700){
+      const c0 = covGrp.children.shift();
+      c0.geometry.dispose(); covGrp.remove(c0);
+    }
+  }
+  placeProbe();
+  drawScan();
+  updateDefButtons();
+}
+
+/* ================= A-Scan ================= */
+const sCv = document.getElementById("scanCv");
+const sc = sCv.getContext("2d");
+function drawScan(){
+  const W = sCv.width, H = sCv.height;
+  sc.fillStyle = "#0A1410"; sc.fillRect(0,0,W,H);
+  const mL=52, mR=14, mT=14, mB=36, pw=W-mL-mR, ph=H-mT-mB;
+  sc.strokeStyle = "#173324"; sc.lineWidth = 2;
+  for(let i=0;i<=10;i++){
+    sc.beginPath(); sc.moveTo(mL+pw*i/10, mT); sc.lineTo(mL+pw*i/10, mT+ph); sc.stroke();
+    sc.beginPath(); sc.moveTo(mL, mT+ph*i/10); sc.lineTo(mL+pw, mT+ph*i/10); sc.stroke();
+  }
+  sc.fillStyle = "#1E7A50"; sc.font = "17px Consolas,monospace";
+  for(let i=0;i<=10;i+=2) sc.fillText(String(SCAN_MAX*i/10), mL+pw*i/10-12, H-12);
+  const bins = new Float32Array(512);
+  const put = (s,a)=>{
+    const c = s/SCAN_MAX*512;
+    for(let k=-8;k<=8;k++){
+      const idx = Math.round(c+k);
+      if (idx>=0 && idx<512)
+        bins[idx] = Math.max(bins[idx], a*Math.exp(-(k*k)/10));
+    }
+  };
+  put(2,1);
+  let best = null;
+  for(const r of rays){
+    if (r.echo && r.echo.amp > 0.004){
+      put(r.echo.s, Math.min(1, r.echo.amp*1.6));
+      if (!r.echo.wall && (!best || r.echo.amp > best.amp)) best = r.echo;
+    }
+  }
+  sc.strokeStyle = "#3CE896"; sc.lineWidth = 2.4;
+  sc.shadowColor = "rgba(60,232,150,.5)"; sc.shadowBlur = 8;
+  sc.beginPath();
+  for(let i=0;i<512;i++){
+    const rf = bins[i]*Math.abs(Math.sin(i*0.8));
+    const x = mL + pw*i/512, y = mT + ph - ph*Math.min(1,rf);
+    i===0 ? sc.moveTo(x,y) : sc.lineTo(x,y);
+  }
+  sc.stroke(); sc.shadowBlur = 0;
+  if (animOn){
+    sc.strokeStyle = "rgba(242,169,59,.7)"; sc.lineWidth = 2;
+    const x = mL + pw*Math.min(animT,SCAN_MAX)/SCAN_MAX;
+    sc.beginPath(); sc.moveTo(x,mT); sc.lineTo(x,mT+ph); sc.stroke();
+  }
+  const v = angleDeg===0 ? V_L : V_S;
+  document.getElementById("roS").textContent =
+    best ? "S "+best.s.toFixed(0)+"mm" : "S --";
+  document.getElementById("roD").textContent =
+    best ? "D "+dep(best.y).toFixed(0)+"mm" : "D --";
+  document.getElementById("roH").textContent =
+    best ? "H "+Math.round(Math.min(1,best.amp*1.6)*100)+"%" : "H --";
+  DEFECTS.forEach(df => df.hitNow = false);
+  if (best && best.def) best.def.hitNow = true;
+}
+function updateDefButtons(){
+  DEFECTS.forEach((df,i)=>{
+    const b = document.getElementById("d"+i);
+    b.classList.toggle("found", !!df.hitNow);
+    b.classList.toggle("on", df.on);
+    df.mesh.visible = df.on;
+    df.mesh.material.opacity = df.hitNow ? 1.0 : 0.85;
+    df.mesh.material.color.setHex(df.hitNow ? 0xff6a4a : 0xe4432a);
+  });
+}
+
+/* ================= 互動 ================= */
+const raycaster = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+let dragProbe = false, orbiting = false, lastP = null, pinch0 = 0;
+function setPtr(ev){
+  const t = ev.touches ? ev.touches[0] : ev;
+  ptr.x = (t.clientX/innerWidth)*2-1;
+  ptr.y = -(t.clientY/innerHeight)*2+1;
+}
+function surfPlane(){
+  if (surfKind==="top")
+    return new THREE.Plane(mkV(0,1,0), -RAIL_H);
+  if (surfKind==="web")
+    return new THREE.Plane(mkV(1,0,0), -surfSide*8.75);
+  const n = mkV(surfSide*footN.x, footN.y, 0).normalize();
+  const p0 = probePos();
+  return new THREE.Plane(n, -n.dot(p0));
+}
+/* 依接觸點自動吸附到合法掃查面:軌頭→走行面、軌腰→側面、軌足→上斜面 */
+function snapTo(pt){
+  const x = pt.x, d = RAIL_H - pt.y, side = (x>=0 ? 1 : -1);
+  probeU = Math.min(RAIL_L-20, Math.max(20, pt.z));
+  if (d <= 47){                          // 軌頭區(含頭側)→ 吸附走行面
+    surfKind = "top"; surfSide = 1;
+    probeV = Math.min(14, Math.max(-14, x));
+  } else if (d <= 134){                  // 軌腰 → 吸附該側側面
+    surfKind = "web"; surfSide = side;
+    probeV = Math.min(RAIL_H-51-3, Math.max(RAIL_H-125+3, pt.y));
+  } else {                               // 軌足 → 吸附該側上斜面
+    surfKind = "foot"; surfSide = side;
+    const ax = Math.min(70, Math.max(26, Math.abs(x)));
+    probeV = side*ax;
+  }
+  highlightSurf();
+}
+function highlightSurf(){
+  document.getElementById("sTop").classList.toggle("on", surfKind==="top");
+  document.getElementById("sWeb").classList.toggle("on", surfKind==="web");
+  document.getElementById("sFoot").classList.toggle("on", surfKind==="foot");
+}
+function dragTo(ev){
+  setPtr(ev);
+  raycaster.setFromCamera(ptr, camera);
+  const hits = raycaster.intersectObject(railMesh, false);
+  if (hits.length){
+    snapTo(hits[0].point);               // 指到鋼軌哪裡,探頭就吸到哪個面
+  } else {
+    const hit = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(surfPlane(), hit)) return;
+    snapTo(hit);                         // 指離鋼軌:沿目前面的延伸平面滑動
+  }
+  rebuild();
+}
+function down(ev){
+  setPtr(ev);
+  raycaster.setFromCamera(ptr, camera);
+  if (raycaster.intersectObject(probeGrp, true).length){
+    dragProbe = true;
+  } else {
+    orbiting = true;
+  }
+  const t = ev.touches ? ev.touches[0] : ev;
+  lastP = {x:t.clientX, y:t.clientY};
+  if (ev.touches && ev.touches.length===2){
+    orbiting = false; dragProbe = false;
+    pinch0 = Math.hypot(
+      ev.touches[0].clientX-ev.touches[1].clientX,
+      ev.touches[0].clientY-ev.touches[1].clientY);
+  }
+}
+function move(ev){
+  if (ev.touches && ev.touches.length===2){
+    const d = Math.hypot(
+      ev.touches[0].clientX-ev.touches[1].clientX,
+      ev.touches[0].clientY-ev.touches[1].clientY);
+    camCtl.dist = Math.min(1400, Math.max(140, camCtl.dist * pinch0/d));
+    pinch0 = d; applyCam(); return;
+  }
+  if (dragProbe){ dragTo(ev); return; }
+  if (orbiting && lastP){
+    const t = ev.touches ? ev.touches[0] : ev;
+    camCtl.theta -= (t.clientX-lastP.x)*0.005;
+    camCtl.phi = Math.min(1.35, Math.max(0.06, camCtl.phi + (t.clientY-lastP.y)*0.004));
+    lastP = {x:t.clientX, y:t.clientY};
+    applyCam();
+  }
+}
+function up(){ dragProbe = false; orbiting = false; lastP = null; }
+const cvEl = renderer.domElement;
+cvEl.addEventListener("mousedown", down);
+addEventListener("mousemove", move);
+addEventListener("mouseup", up);
+cvEl.addEventListener("touchstart", e=>{e.preventDefault(); down(e);}, {passive:false});
+cvEl.addEventListener("touchmove",  e=>{e.preventDefault(); move(e);}, {passive:false});
+cvEl.addEventListener("touchend", up);
+cvEl.addEventListener("wheel", e=>{
+  e.preventDefault();
+  camCtl.dist = Math.min(1400, Math.max(140, camCtl.dist * (1 + e.deltaY*0.001)));
+  applyCam();
+}, {passive:false});
+
+/* ================= 按鍵 ================= */
+function bindGrp(map, apply){
+  for(const id in map){
+    document.getElementById(id).addEventListener("click", ()=>{
+      apply(map[id]);
+      for(const j in map)
+        document.getElementById(j).classList.toggle("on", j===id);
+      animT = 0; rebuild();
+    });
+  }
+}
+function jumpSurface(kind){
+  surfKind = kind;
+  if (kind==="top"){ surfSide = 1; probeV = 0; }
+  else if (kind==="web"){ if (!surfSide) surfSide = -1; probeV = 84; }
+  else { if (!surfSide) surfSide = -1; probeV = surfSide*48; }
+  probeU = 300;
+  highlightSurf();
+  animT = 0; rebuild();
+}
+document.getElementById("sTop").addEventListener("click", ()=>jumpSurface("top"));
+document.getElementById("sWeb").addEventListener("click", ()=>jumpSurface("web"));
+document.getElementById("sFoot").addEventListener("click", ()=>jumpSurface("foot"));
+bindGrp({a0:0, a45:45, a70:70}, a=>{ angleDeg = a; });
+bindGrp({dF:1, dB:-1}, d=>{ dirSign = d; });
+const VIEWS = {
+  vSquat:{theta:-0.20, phi:0.16, dist:260, target:mkV(0,120,300)},
+  vSide: {theta:-1.45, phi:0.22, dist:520, target:mkV(0,80,300)},
+  vTopV: {theta:-0.6,  phi:1.25, dist:620, target:mkV(0,60,300)},
+};
+for(const id in VIEWS){
+  document.getElementById(id).addEventListener("click", ()=>{
+    Object.assign(camCtl, {theta:VIEWS[id].theta, phi:VIEWS[id].phi, dist:VIEWS[id].dist});
+    camCtl.target.copy(VIEWS[id].target);
+    applyCam();
+  });
+}
+DEFECTS.forEach((df,i)=>{
+  document.getElementById("d"+i).addEventListener("click", ()=>{
+    df.on = !df.on; rebuild();
+  });
+});
+document.getElementById("anim").addEventListener("click", e=>{
+  animOn = !animOn;
+  e.target.classList.toggle("on", animOn);
+  pulse.visible = animOn;
+});
+document.getElementById("clearCov").addEventListener("click", ()=>{
+  while(covGrp.children.length){
+    const c0 = covGrp.children.pop();
+    c0.geometry.dispose(); covGrp.remove(c0);
+  }
+  lastCov = {u:-999, v:-999, key:""};
+});
+
+/* ================= 主迴圈 ================= */
+function pulseAlong(pts, s){
+  let acc = 0;
+  for(let i=0;i<pts.length-1;i++){
+    const L = pts[i].distanceTo(pts[i+1]);
+    if (acc+L >= s)
+      return pts[i].clone().lerp(pts[i+1], (s-acc)/L);
+    acc += L;
+  }
+  return null;
+}
+function loop(ts){
+  const dt = Math.min(50, ts-lastTs); lastTs = ts;
+  if (animOn){
+    animT += dt*0.20;
+    if (animT > SCAN_MAX+40) animT = 0;
+    const c = rays.find(r=>r.center);
+    const pos = c ? pulseAlong(c.pts, animT) : null;
+    if (pos){ pulse.visible = true; pulse.position.copy(pos); }
+    else pulse.visible = false;
+    drawScan();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+if (matchMedia("(prefers-reduced-motion: reduce)").matches){
+  animOn = false;
+  document.getElementById("anim").classList.remove("on");
+  pulse.visible = false;
+}
+sizeRenderer();
+applyCam();
+rebuild();
+requestAnimationFrame(ts=>{ lastTs = ts; requestAnimationFrame(loop); });
+})();
+</script>
+</body>
+</html>
