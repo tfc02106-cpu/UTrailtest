@@ -1,9 +1,12 @@
+
+
+Rail ut 3d · HTML
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>鋼軌超音波掃查 3D 模擬器</title>
+<title>鋼軌超音波掃查 3D 模擬器Beta</title>
 <style>
 :root{
   --panel:#2C333B; --panel-edge:#3C454F; --ink:#E8ECEF; --ink-dim:#9AA6B0;
@@ -88,7 +91,7 @@ button.def.off{opacity:.42}
 </head>
 <body>
 <div id="scene"></div>
-
+ 
 <div id="topbar">
   <h1>鋼軌超音波掃查 3D 模擬器</h1>
   <span class="badge">教學模擬</span>
@@ -96,7 +99,7 @@ button.def.off{opacity:.42}
     抓住橙色探頭直接刷,指到軌頭/軌腰/軌足會自動吸附換面・拖空間=旋轉・滾輪=縮放
   </span>
 </div>
-
+ 
 <div id="panel">
   <div class="group">
     <span>掃查面(拖曳自動吸附)</span>
@@ -145,7 +148,7 @@ button.def.off{opacity:.42}
     </div>
   </div>
 </div>
-
+ 
 <div id="ascan">
   <h2>A-SCAN(聲程 0–500 mm)</h2>
   <canvas id="scanCv" width="640" height="330"></canvas>
@@ -154,13 +157,13 @@ button.def.off{opacity:.42}
   </div>
   <div id="roName">未偵測到瑕疵回波</div>
 </div>
-
+ 
 <div id="hint">
   <b>操作:</b>抓住橙色探頭<b>直接拖著刷</b>——指標滑到軌頭、軌腰、軌足哪裡,
   探頭就自動吸附到該面並轉向。鋼軌上有 <b>10 種典型瑕疵</b>(含接頭螺栓孔區與兩處焊道),
   刷到時該項目會亮綠、A-Scan 顯示名稱。每一種各要用哪個面、哪個角度才照得到?
 </div>
-
+ 
 <div id="err">
   <div>
     <div style="font-size:1.1rem;margin-bottom:10px">3D 元件載入失敗</div>
@@ -169,7 +172,7 @@ button.def.off{opacity:.42}
     </div>
   </div>
 </div>
-
+ 
 <script>
 /* Three.js:主來源 jsDelivr,失敗時自動改用 cdnjs;兩者皆失敗才報錯 */
 (function(){
@@ -188,7 +191,7 @@ button.def.off{opacity:.42}
     });
 })();
 </script>
-
+ 
 <script>
 window.__railInit = function(){
 (() => {
@@ -198,7 +201,7 @@ if (typeof THREE === "undefined"){
   return;
 }
 try {
-
+ 
 /* ================= 幾何常數(mm,世界座標 y 向上,鋼軌沿 z) ================= */
 const RAIL_L = 600, RAIL_H = 172;
 const PROF = [           // [深度d(自軌頂), 半寬hw]
@@ -216,7 +219,7 @@ function hwAtDepth(d){
 const dep = y => RAIL_H - y;                 // 世界 y → 深度
 const insideRail = (x,y,z) =>
   z>=0 && z<=RAIL_L && y>=0 && y<=RAIL_H && Math.abs(x) <= hwAtDepth(dep(y));
-
+ 
 /* ================= 狀態 ================= */
 let surfKind = "top", surfSide = -1;   // 掃查面種類與左右側(拖曳時自動吸附切換)
 let angleDeg = 0, dirSign = 1;         // 沿軌向 ±z
@@ -224,7 +227,7 @@ let probeU = 300, probeV = 0;          // u=沿軌 z;v=面內另一軸
 let animOn = true, animT = 0, lastTs = 0;
 const V_L = 5920, V_S = 3230, SCAN_MAX = 500;
 const N_RAYS = 13, SPREAD = 4*Math.PI/180;
-
+ 
 /* 掃查面幾何:top(軌頂)/ web(軌腰側面,side=±1)/ foot(軌足上斜面,side=±1) */
 const footP1 = {x:22, y:RAIL_H-140}, footP2 = {x:75, y:RAIL_H-160.5};
 const footN = (()=>{                    // 軌足斜面法向的 |x|,|y| 分量(左右對稱)
@@ -252,7 +255,7 @@ function beamDir(){
   const th = angleDeg*Math.PI/180;
   return inw.multiplyScalar(Math.cos(th)).add(alo.multiplyScalar(Math.sin(th))).normalize();
 }
-
+ 
 /* 10 種典型鋼軌瑕疵(位置、方向依常見成因設定;tip = 建議掃查方式) */
 const mkV = (x,y,z)=>new THREE.Vector3(x,y,z);
 const DEFECTS = [
@@ -302,7 +305,7 @@ DEFECTS.forEach(d=>{
   d.uL = d.u.length(); d.vL = d.v.length();
   d.uN = d.u.clone().normalize(); d.vN = d.v.clone().normalize();
 });
-
+ 
 /* ================= 射線追蹤(步進法) ================= */
 function traceRay(origin, d0, weight){
   const p = origin.clone(), dir = d0.clone();
@@ -366,7 +369,7 @@ function coneRays(){
   }
   return rays.map(r => Object.assign(traceRay(o, r.d, r.w), {center:r.center, w:r.w}));
 }
-
+ 
 /* ================= Three.js 場景 ================= */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x22282E);
@@ -375,7 +378,7 @@ const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 document.getElementById("scene").appendChild(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(50, 1, 1, 4000);
-
+ 
 /* 自製軌道攝影機 */
 const camCtl = {theta:-0.9, phi:0.42, dist:520, target:mkV(0,70,300)};
 function applyCam(){
@@ -392,13 +395,13 @@ function sizeRenderer(){
   camera.updateProjectionMatrix();
 }
 addEventListener("resize", sizeRenderer);
-
+ 
 /* 光照 */
 scene.add(new THREE.HemisphereLight(0xdfe8ee, 0x3a3f45, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 0.75);
 sun.position.set(-300, 500, 200);
 scene.add(sun);
-
+ 
 /* 鋼軌(擠出 UIC60 斷面) */
 const shape = new THREE.Shape();
 shape.moveTo(PROF[0][1], RAIL_H-PROF[0][0]);
@@ -419,7 +422,7 @@ const shine = new THREE.Mesh(
   new THREE.MeshStandardMaterial({color:0xf2f5f7, metalness:0.9, roughness:0.15}));
 shine.position.set(0, RAIL_H+0.4, RAIL_L/2);
 scene.add(shine);
-
+ 
 /* 軌枕與道碴 */
 const tieMat = new THREE.MeshStandardMaterial({color:0x6d675e, roughness:0.95});
 for(let z=40; z<RAIL_L; z+=150){
@@ -433,7 +436,7 @@ const ballast = new THREE.Mesh(
 ballast.rotation.x = -Math.PI/2;
 ballast.position.set(0, -36, RAIL_L/2);
 scene.add(ballast);
-
+ 
 /* 螺栓孔(接頭區,對應 2 號瑕疵)與焊道標示 */
 const holeMat = new THREE.MeshStandardMaterial({color:0x2b3138, roughness:0.9});
 [100, 136].forEach(z=>{
@@ -449,7 +452,7 @@ const weldMat = new THREE.MeshStandardMaterial({
   band.position.set(0, RAIL_H/2, z);
   scene.add(band);
 });
-
+ 
 /* 瑕疵面 */
 DEFECTS.forEach(df=>{
   const g = new THREE.PlaneGeometry(df.uL*2, df.vL*2);
@@ -464,7 +467,7 @@ DEFECTS.forEach(df=>{
   df.mesh = mesh;
   scene.add(mesh);
 });
-
+ 
 /* 探頭 */
 const probeGrp = new THREE.Group();
 const probeBody = new THREE.Mesh(
@@ -490,7 +493,7 @@ function placeProbe(){
   const q = new THREE.Quaternion().setFromUnitVectors(mkV(0,1,0), outw);
   probeGrp.setRotationFromQuaternion(q);
 }
-
+ 
 /* 聲束(每幀重建)與覆蓋殘跡 */
 const beamGrp = new THREE.Group(); beamGrp.renderOrder = 6; scene.add(beamGrp);
 const covGrp = new THREE.Group();  covGrp.renderOrder = 4;  scene.add(covGrp);
@@ -509,7 +512,7 @@ const pulse = new THREE.Mesh(
   new THREE.SphereGeometry(4, 12, 12),
   new THREE.MeshBasicMaterial({color:0x3CE896, transparent:true, opacity:0.95, depthTest:false}));
 pulse.renderOrder = 7; scene.add(pulse);
-
+ 
 let rays = [];
 function rebuild(){
   rays = coneRays();
@@ -534,7 +537,7 @@ function rebuild(){
   placeProbe();
   drawScan();
 }
-
+ 
 /* ================= A-Scan ================= */
 const sCv = document.getElementById("scanCv");
 const sc = sCv.getContext("2d");
@@ -611,7 +614,7 @@ function updateDefButtons(){
     df.mesh.material.color.setHex(df.hitNow ? 0xff6a4a : 0xe4432a);
   });
 }
-
+ 
 /* ================= 互動 ================= */
 const raycaster = new THREE.Raycaster();
 const ptr = new THREE.Vector2();
@@ -712,7 +715,7 @@ cvEl.addEventListener("wheel", e=>{
   camCtl.dist = Math.min(1400, Math.max(140, camCtl.dist * (1 + e.deltaY*0.001)));
   applyCam();
 }, {passive:false});
-
+ 
 /* ================= 按鍵 ================= */
 function bindGrp(map, apply){
   for(const id in map){
@@ -778,7 +781,7 @@ document.getElementById("clearCov").addEventListener("click", ()=>{
   }
   lastCov = {u:-999, v:-999, key:""};
 });
-
+ 
 /* ================= 主迴圈 ================= */
 function pulseAlong(pts, s){
   let acc = 0;
@@ -815,7 +818,7 @@ sizeRenderer();
 applyCam();
 rebuild();
 requestAnimationFrame(ts=>{ lastTs = ts; requestAnimationFrame(loop); });
-
+ 
 } catch(e){
   // 初始化中任何錯誤都顯示出來,不再是無聲黑畫面
   var box = document.getElementById("err");
@@ -829,3 +832,13 @@ requestAnimationFrame(ts=>{ lastTs = ts; requestAnimationFrame(loop); });
 </script>
 </body>
 </html>
+ 
+
+
+
+
+
+
+
+翻譯
+
